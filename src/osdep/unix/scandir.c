@@ -34,10 +34,10 @@
  * Returns: number of elements in the array or -1 if error
  */
 
-int scandir (char *dirname,struct direct ***namelist,select_t select,
-	     compar_t compar)
+int scandir(char *dirname, struct direct ***namelist, select_t select,
+            compar_t compar)
 {
-  struct direct *p,*d,**names;
+  struct direct *p, *d, **names;
   int nitems;
   struct stat stb;
   long nlmax;
@@ -74,8 +74,8 @@ int scandir (char *dirname,struct direct ***namelist,select_t select,
  * Returns: negative if d1 < d2, 0 if d1 == d2, postive if d1 > d2
  */
 
-int alphasort (void *d1,void *d2)
+int alphasort(void *d1, void *d2)
 {
-  return strcmp ((*(struct direct **) d1)->d_name,
-		 (*(struct direct **) d2)->d_name);
+  return strcmp((*(struct direct **)d1)->d_name,
+                (*(struct direct **)d2)->d_name);
 }

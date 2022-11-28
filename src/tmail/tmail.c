@@ -27,6 +27,7 @@
  */
 
 #include <stdio.h>
+#include <ctype.h>
 #include <pwd.h>
 #include <errno.h>
 extern int errno;		/* just in case */

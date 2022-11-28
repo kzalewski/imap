@@ -150,10 +150,13 @@ CHUNKSIZE=65536
 # Normally no need to change any of these
 
 ARCHIVE=c-client.a
+SHLIBBASE=c-client
+SHLIBNAME=c-client.so
 BINARIES=osdep.o mail.o misc.o newsrc.o smanager.o utf8.o utf8aux.o siglocal.o \
  dummy.o pseudo.o netmsg.o flstring.o fdstring.o \
  rfc822.o nntp.o smtp.o imap4r1.o pop3.o \
- unix.o mbx.o mmdf.o tenex.o mtx.o news.o phile.o mh.o mx.o mix.o
+ unix.o mbx.o mmdf.o tenex.o mtx.o news.o phile.o mh.o mx.o mix.o \
+ utime_port.o
 CFLAGS=-g
 
 CAT=cat
@@ -910,6 +913,7 @@ tenex.o: mail.h misc.h osdep.h dummy.h
 unix.o: mail.h misc.h osdep.h unix.h pseudo.h dummy.h
 utf8.o: mail.h misc.h osdep.h utf8.h tmap.c widths.c
 utf8aux.o: mail.h misc.h osdep.h utf8.h
+utime_port.o: utime_port.h
 
 
 # OS-dependent

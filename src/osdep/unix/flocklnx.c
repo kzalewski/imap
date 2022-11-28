@@ -55,7 +55,7 @@ int safe_flock (int fd,int op)
     case EINTR:			/* interrupt */
       break;
     case ENOLCK:		/* lock table is full */
-      sprintf (tmp,"File locking failure: %s",strerror (errno));
+      snprintf (tmp, MAILTMPLEN, "File locking failure: %s", strerror (errno));
       mm_log (tmp,WARN);	/* give the user a warning of what happened */
       if (!logged++) syslog (LOG_ERR, "%s", tmp);
 				/* return failure if non-blocking lock */
@@ -67,7 +67,7 @@ int safe_flock (int fd,int op)
     case EBADF:			/* not valid open file descriptor */
     case EINVAL:		/* invalid operator */
     default:			/* other error code? */
-      sprintf (tmp,"Unexpected file locking failure: %s",strerror (errno));
+      snprintf (tmp, MAILTMPLEN, "Unexpected file locking failure: %s", strerror (errno));
       fatal (tmp);
     }
     break;

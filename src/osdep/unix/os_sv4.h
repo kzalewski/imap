@@ -58,9 +58,7 @@ int Setpgrp (int pid,int gid);
 #define direct dirent
 #define random lrand48
 
-
 #define utime portable_utime
-int portable_utime (char *file,time_t timep[2]);
 
 long gethostid (void);
 typedef int (*select_t) (struct direct *name);
@@ -75,4 +73,5 @@ int alphasort (void *d1,void *d2);
 #include "ftl.h"
 #include "nl.h"
 #include "tcp.h"
+#include "utime_port.h"
 #include "flocksim.h"

@@ -28,6 +28,7 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <errno.h>
+#include <dirent.h>
 extern int errno;		/* just in case */
 #include "mail.h"
 #include "osdep.h"
@@ -114,7 +115,7 @@ MIXBURP {
 DRIVER *mix_valid (char *name);
 long mix_isvalid (char *name,char *meta);
 void *mix_parameters (long function,void *value);
-long mix_dirfmttest (char *name);
+long mix_dirfmttest(const char *name);
 void mix_scan (MAILSTREAM *stream,char *ref,char *pat,char *contents);
 long mix_scan_contents (char *name,char *contents,unsigned long csiz,
 			unsigned long fsiz);
@@ -125,7 +126,6 @@ long mix_unsubscribe (MAILSTREAM *stream,char *mailbox);
 long mix_create (MAILSTREAM *stream,char *mailbox);
 long mix_delete (MAILSTREAM *stream,char *mailbox);
 long mix_rename (MAILSTREAM *stream,char *old,char *newname);
-int mix_rselect (struct direct *name);
 MAILSTREAM *mix_open (MAILSTREAM *stream);
 void mix_close (MAILSTREAM *stream,long options);
 void mix_abort (MAILSTREAM *stream);
@@ -140,8 +140,9 @@ THREADNODE *mix_thread (MAILSTREAM *stream,char *type,char *charset,
 long mix_ping (MAILSTREAM *stream);
 void mix_check (MAILSTREAM *stream);
 long mix_expunge (MAILSTREAM *stream,char *sequence,long options);
-int mix_select (struct direct *name);
-int mix_msgfsort (const void *d1,const void *d2);
+static int mix_select(const struct dirent *d);
+static int mix_rselect(const struct dirent *d);
+static int mix_msgfsort(const struct dirent **d1, const struct dirent **d2);
 long mix_addset (SEARCHSET **set,unsigned long start,unsigned long size);
 long mix_burp (MAILSTREAM *stream,MIXBURP *burp,unsigned long *reclaimed);
 long mix_burp_check (SEARCHSET *set,size_t size,char *file);
@@ -284,10 +285,10 @@ void *mix_parameters (long function,void *value)
  * Returns: T if internal name, NIL otherwise
  */
 
-long mix_dirfmttest (char *name)
+long mix_dirfmttest(const char *name)
 {
 				/* belongs to MIX if starts with .mix */
-  return strncmp (name,MIXNAME,sizeof (MIXNAME) - 1) ? NIL : LONGT;
+  return strncmp(name, MIXNAME, sizeof(MIXNAME) - 1) ? NIL : LONGT;
 }
 
 /* MIX mail scan mailboxes
@@ -321,19 +322,23 @@ long mix_scan_contents (char *name,char *contents,unsigned long csiz,
   size_t namelen = strlen (name);
   struct stat sbuf;
   struct direct **names = NIL;
-  if ((nfiles = scandir (name,&names,mix_select,mix_msgfsort)) > 0)
+  if ((nfiles = scandir(name, &names, mix_select, mix_msgfsort)) > 0) {
     for (i = 0; i < nfiles; ++i) {
       if (!ret) {
-	sprintf (s = (char *) fs_get (namelen + strlen (names[i]->d_name) + 2),
-		 "%s/%s",name,names[i]->d_name);
-	if (!stat (s,&sbuf) && (csiz <= sbuf.st_size))
+	sprintf(s = (char *) fs_get(namelen + strlen (names[i]->d_name) + 2),
+		 "%s/%s", name, names[i]->d_name);
+	if (!stat (s,&sbuf) && (csiz <= sbuf.st_size)) {
 	  ret = dummy_scan_contents (s,contents,csiz,sbuf.st_size);
-	fs_give ((void **) &s);
+        }
+	fs_give((void **) &s);
       }
-      fs_give ((void **) &names[i]);
+      fs_give((void **) &names[i]);
     }
+  }
 				/* free directory list */
-  if (a = (void *) names) fs_give ((void **) &a);
+  if (a = (void *) names) {
+    fs_give ((void **) &a);
+  }
   return ret;
 }
 
@@ -471,16 +476,16 @@ long mix_delete (MAILSTREAM *stream,char *mailbox)
   else if (((fd = open (tmp,O_RDWR,NIL)) < 0) || flock (fd,LOCK_EX|LOCK_NB))
     sprintf (tmp,"Can't lock mailbox for delete: %.80s",mailbox);
 				/* delete metadata */
-  else if (unlink (tmp)) sprintf (tmp,"Can't delete mailbox %.80s index: %80s",
+  else if (unlink(tmp)) sprintf (tmp,"Can't delete mailbox %.80s index: %80s",
 				  mailbox,strerror (errno));
   else {
     close (fd);			/* close descriptor on deleted metadata */
 				/* get directory name */
-    *(s = strrchr (tmp,'/')) = '\0';
-    if (dirp = opendir (tmp)) {	/* open directory */
+    *(s = strrchr(tmp,'/')) = '\0';
+    if (dirp = opendir(tmp)) {	/* open directory */
       *s++ = '/';		/* restore delimiter */
 				/* massacre messages */
-      while (d = readdir (dirp)) if (mix_dirfmttest (d->d_name)) {
+      while (d = readdir(dirp)) if (mix_dirfmttest (d->d_name)) {
 	strcpy (s,d->d_name);	/* make path */
 	unlink (tmp);		/* sayonara */
       }
@@ -494,7 +499,7 @@ long mix_delete (MAILSTREAM *stream,char *mailbox)
     }
     return T;			/* always success */
   }
-  if (fd >= 0) close (fd);	/* close any descriptor on metadata */
+  if (fd >= 0) close(fd);	/* close any descriptor on metadata */
   MM_LOG (tmp,ERROR);		/* something failed */
   return NIL;
 }
@@ -553,7 +558,7 @@ long mix_rename (MAILSTREAM *stream,char *old,char *newname)
       size_t srcl = strlen (tmp);
       size_t dstl = strlen (tmp1);
 				/* rename each mix file to new directory */
-      for (i = lasterror = 0,n = scandir (tmp,&names,mix_rselect,alphasort);
+      for (i = lasterror = 0, n = scandir(tmp, &names, mix_rselect, alphasort);
 	   i < n; ++i) {
 	size_t len = strlen (names[i]->d_name);
 	sprintf (src = (char *) fs_get (srcl + len + 2),"%s/%s",
@@ -587,9 +592,9 @@ long mix_rename (MAILSTREAM *stream,char *old,char *newname)
  * Returns: T if mix file name, NIL otherwise
  */
 
-int mix_rselect (struct direct *name)
+static int mix_rselect(const struct dirent *d)
 {
-  return mix_dirfmttest (name->d_name);
+  return mix_dirfmttest(d->d_name);
 }
 
 /* MIX mail open
@@ -1051,7 +1056,7 @@ long mix_expunge (MAILSTREAM *stream,char *sequence,long options)
     if (!flock (LOCAL->mfd,LOCK_EX|LOCK_NB)) {
       void *a;
       struct direct **names = NIL;
-      long nfiles = scandir (stream->mailbox,&names,mix_select,mix_msgfsort);
+      long nfiles = scandir(stream->mailbox, &names, mix_select, mix_msgfsort);
       if (nfiles > 0) {		/* if have message files */
 	MIXBURP *burp,*cur;
 				/* initialize burp list */
@@ -1059,12 +1064,16 @@ long mix_expunge (MAILSTREAM *stream,char *sequence,long options)
 	  MIXBURP *nxt = (MIXBURP *) memset (fs_get (sizeof (MIXBURP)),0,
 					     sizeof (MIXBURP));
 				/* another file found */
-	  if (cur) cur = cur->next = nxt;
-	  else cur = burp = nxt;
+	  if (cur) {
+            cur = cur->next = nxt;
+          }
+	  else {
+            cur = burp = nxt;
+          }
 	  cur->name = names[i]->d_name;
-	  cur->fileno = strtoul (cur->name + sizeof (MIXNAME) - 1,NIL,16);
+	  cur->fileno = strtoul(cur->name + sizeof (MIXNAME) - 1, NIL, 16);
 	  cur->tail = &cur->set;
-	  fs_give ((void **) &names[i]);
+	  fs_give((void **) &names[i]);
 	}
 				/* now load ranges */
 	for (i = 1, cur = burp; ret && (i <= stream->nmsgs); i++) {
@@ -1146,14 +1155,17 @@ long mix_expunge (MAILSTREAM *stream,char *sequence,long options)
  * ".mix" with no suffix was used by experimental versions
  */
 
-int mix_select (struct direct *name)
+static int mix_select(const struct direct *d)
 {
-  char c,*s;
+  char c;
+  const char *s;
 				/* make sure name has prefix */
-  if (mix_dirfmttest (name->d_name)) {
-    for (c = *(s = name->d_name + sizeof (MIXNAME) - 1); c && isxdigit (c);
+  if (mix_dirfmttest(d->d_name)) {
+    for (c = *(s = d->d_name + sizeof(MIXNAME) - 1); c && isxdigit (c);
 	 c = *s++);
-    if (!c) return T;		/* all-hex or no suffix */
+    if (!c) {
+      return T;		/* all-hex or no suffix */
+    }
   }
   return NIL;			/* not suffix or non-hex */
 }
@@ -1165,12 +1177,12 @@ int mix_select (struct direct *name)
  * Returns: -1 if d1 < d2, 0 if d1 == d2, 1 d1 > d2
  */
 
-int mix_msgfsort (const void *d1,const void *d2)
+static int mix_msgfsort(const struct dirent **d1, const struct dirent **d2)
 {
-  char *n1 = (*(struct direct **) d1)->d_name + sizeof (MIXNAME) - 1;
-  char *n2 = (*(struct direct **) d2)->d_name + sizeof (MIXNAME) - 1;
-  return compare_ulong (*n1 ? strtoul (n1,NIL,16) : 0,
-			*n2 ? strtoul (n2,NIL,16) : 0);
+  const char *n1 = (*d1)->d_name + sizeof (MIXNAME) - 1;
+  const char *n2 = (*d2)->d_name + sizeof (MIXNAME) - 1;
+  return compare_ulong(*n1 ? strtoul(n1, NIL, 16) : 0,
+                       *n2 ? strtoul(n2, NIL, 16) : 0);
 }
 
 

@@ -34,9 +34,9 @@
 #ifndef _XOPEN_SOURCE
 #define _XOPEN_SOURCE 1
 #endif /* _XOPEN_SOURCE */
-#ifndef _BSD_SOURCE
-#define _BSD_SOURCE 1
-#endif /* _BSD_SOURCE */
+#ifndef _DEFAULT_SOURCE
+#define _DEFAULT_SOURCE 1
+#endif /* _DEFAULT_SOURCE */
 
 /* end Debian Linux on Alpha strangeness */
 
@@ -55,6 +55,7 @@
 
 #define setpgrp setpgid
 
+#define utime portable_utime
 #define direct dirent
 
 #define flock safe_flock
@@ -65,3 +66,5 @@
 #include "ftl.h"
 #include "nl.h"
 #include "tcp.h"
+#include "utime_port.h"
+#include "flocklnx.h"

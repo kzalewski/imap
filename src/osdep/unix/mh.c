@@ -103,11 +103,11 @@ long mh_copy (MAILSTREAM *stream,char *sequence,char *mailbox,
 	      long options);
 long mh_append (MAILSTREAM *stream,char *mailbox,append_t af,void *data);
 
-int mh_select (struct direct *name);
-int mh_numsort (const void *d1,const void *d2);
-char *mh_file (char *dst,char *name);
-long mh_canonicalize (char *pattern,char *ref,char *pat);
-void mh_setdate (char *file,MESSAGECACHE *elt);
+static int mh_select(const struct dirent *name);
+static int mh_numsort(const struct dirent **d1, const struct dirent **d2);
+static char *mh_file(char *dst, char *name);
+static long mh_canonicalize(char *pattern, char *ref, char *pat);
+static void mh_setdate(char *file, MESSAGECACHE *elt);
 
 /* MH mail routines */
 
@@ -418,7 +418,7 @@ void mh_lsub (MAILSTREAM *stream,char *ref,char *pat)
 void mh_list_work (MAILSTREAM *stream,char *dir,char *pat,long level)
 {
   DIR *dp;
-  struct direct *d;
+  struct dirent *d;
   struct stat sbuf;
   char *cp,*np,curdir[MAILTMPLEN],name[MAILTMPLEN];
 				/* build MH name to search */
@@ -502,7 +502,7 @@ long mh_create (MAILSTREAM *stream,char *mailbox)
 long mh_delete (MAILSTREAM *stream,char *mailbox)
 {
   DIR *dirp;
-  struct direct *d;
+  struct dirent *d;
   int i;
   char tmp[MAILTMPLEN];
 				/* is mailbox valid? */
@@ -861,8 +861,8 @@ long mh_ping (MAILSTREAM *stream)
   }
   stream->silent = T;		/* don't pass up mm_exists() events yet */
   if (sbuf.st_ctime != LOCAL->scantime) {
-    struct direct **names = NIL;
-    long nfiles = scandir (LOCAL->dir,&names,mh_select,mh_numsort);
+    struct dirent **names = NIL;
+    long nfiles = scandir(LOCAL->dir, &names, mh_select, mh_numsort);
     if (nfiles < 0) nfiles = 0;	/* in case error */
 				/* note scanned now */
     LOCAL->scantime = sbuf.st_ctime;
@@ -1093,7 +1093,7 @@ long mh_copy (MAILSTREAM *stream,char *sequence,char *mailbox,long options)
 
 long mh_append (MAILSTREAM *stream,char *mailbox,append_t af,void *data)
 {
-  struct direct **names = NIL;
+  struct dirent **names = NIL;
   int fd;
   char c,*flags,*date,*s,tmp[MAILTMPLEN];
   STRING *message;
@@ -1128,7 +1128,7 @@ long mh_append (MAILSTREAM *stream,char *mailbox,append_t af,void *data)
   }
 				/* get first message */
   if (!(*af) (stream,data,&flags,&date,&message)) return NIL;
-  if ((nfiles = scandir (tmp,&names,mh_select,mh_numsort)) > 0) {
+  if ((nfiles = scandir(tmp, &names, mh_select, mh_numsort)) > 0) {
 				/* largest number */
     last = atoi (names[nfiles-1]->d_name);    
     for (i = 0; i < nfiles; ++i) /* free directory */
@@ -1194,10 +1194,10 @@ long mh_append (MAILSTREAM *stream,char *mailbox,append_t af,void *data)
  * Returns: T to use file name, NIL to skip it
  */
 
-int mh_select (struct direct *name)
+static int mh_select(const struct dirent *name)
 {
   char c;
-  char *s = name->d_name;
+  const char *s = name->d_name;
   while (c = *s++) if (!isdigit (c)) return NIL;
   return T;
 }
@@ -1209,10 +1209,9 @@ int mh_select (struct direct *name)
  * Returns: negative if d1 < d2, 0 if d1 == d2, postive if d1 > d2
  */
 
-int mh_numsort (const void *d1,const void *d2)
+static int mh_numsort(const struct dirent **d1, const struct dirent **d2)
 {
-  return atoi ((*(struct direct **) d1)->d_name) -
-    atoi ((*(struct direct **) d2)->d_name);
+  return atoi((*d1)->d_name) - atoi((*d2)->d_name);
 }
 
 
@@ -1222,7 +1221,7 @@ int mh_numsort (const void *d1,const void *d2)
  * Returns: destination
  */
 
-char *mh_file (char *dst,char *name)
+static char *mh_file(char *dst, char *name)
 {
   char *s;
   char *path = mh_path (dst);
@@ -1245,7 +1244,7 @@ char *mh_file (char *dst,char *name)
  * Returns: T if success, NIL if failure
  */
 
-long mh_canonicalize (char *pattern,char *ref,char *pat)
+static long mh_canonicalize(char *pattern, char *ref, char *pat)
 {
   unsigned long i;
   char *s,tmp[MAILTMPLEN];
@@ -1274,7 +1273,7 @@ long mh_canonicalize (char *pattern,char *ref,char *pat)
  *	    elt containing date
  */
 
-void mh_setdate (char *file,MESSAGECACHE *elt)
+static void mh_setdate(char *file, MESSAGECACHE *elt)
 {
   time_t tp[2];
   tp[0] = time (0);		/* atime is now */

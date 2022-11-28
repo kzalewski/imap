@@ -30,6 +30,7 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <errno.h>
+#include <dirent.h>
 extern int errno;		/* just in case */
 #include "mail.h"
 #include "osdep.h"
@@ -76,8 +77,8 @@ long news_create (MAILSTREAM *stream,char *mailbox);
 long news_delete (MAILSTREAM *stream,char *mailbox);
 long news_rename (MAILSTREAM *stream,char *old,char *newname);
 MAILSTREAM *news_open (MAILSTREAM *stream);
-int news_select (struct direct *name);
-int news_numsort (const void *d1,const void *d2);
+static int news_select(const struct dirent *d);
+static int news_numsort(const struct dirent **d1, const struct dirent **d2);
 void news_close (MAILSTREAM *stream,long options);
 void news_fast (MAILSTREAM *stream,char *sequence,long flags);
 void news_flags (MAILSTREAM *stream,char *sequence,long flags);
@@ -354,27 +355,34 @@ long news_rename (MAILSTREAM *stream,char *old,char *newname)
  * Returns: stream on success, NIL on failure
  */
 
-MAILSTREAM *news_open (MAILSTREAM *stream)
+MAILSTREAM *news_open(MAILSTREAM *stream)
 {
-  long i,nmsgs;
-  char *s,tmp[MAILTMPLEN];
+  long i, nmsgs;
+  char *s, tmp[MAILTMPLEN];
   struct direct **names = NIL;
   				/* return prototype for OP_PROTOTYPE call */
-  if (!stream) return &newsproto;
-  if (stream->local) fatal ("news recycle stream");
+  if (!stream) {
+    return &newsproto;
+  }
+  if (stream->local) {
+    fatal ("news recycle stream");
+  }
 				/* build directory name */
-  sprintf (s = tmp,"%s/%s",(char *) mail_parameters (NIL,GET_NEWSSPOOL,NIL),
-	   stream->mailbox + 6);
-  while (s = strchr (s,'.')) *s = '/';
+  snprintf (s = tmp, MAILTMPLEN, "%s/%s",
+        (char *)mail_parameters(NIL, GET_NEWSSPOOL, NIL), stream->mailbox + 6);
+
+  while (s = strchr(s, '.')) {
+    *s = '/';
+  }
 				/* scan directory */
-  if ((nmsgs = scandir (tmp,&names,news_select,news_numsort)) >= 0) {
+  if ((nmsgs = scandir(tmp, &names, news_select, news_numsort)) >= 0) {
     mail_exists (stream,nmsgs);	/* notify upper level that messages exist */
     stream->local = fs_get (sizeof (NEWSLOCAL));
     LOCAL->dirty = NIL;		/* no update to .newsrc needed yet */
     LOCAL->dir = cpystr (tmp);	/* copy directory name for later */
     LOCAL->name = cpystr (stream->mailbox + 6);
     for (i = 0; i < nmsgs; ++i) {
-      stream->uid_last = mail_elt (stream,i+1)->private.uid =
+      stream->uid_last = mail_elt(stream, i+1)->private.uid =
 	atoi (names[i]->d_name);
       fs_give ((void **) &names[i]);
     }
@@ -393,21 +401,27 @@ MAILSTREAM *news_open (MAILSTREAM *stream)
       mm_log (tmp,WARN);
     }
   }
-  else mm_log ("Unable to scan newsgroup spool directory",ERROR);
+  else {
+    mm_log ("Unable to scan newsgroup spool directory",ERROR);
+  }
   return LOCAL ? stream : NIL;	/* if stream is alive, return to caller */
 }
 
 /* News file name selection test
  * Accepts: candidate directory entry
- * Returns: T to use file name, NIL to skip it
+ * Returns: 1 to use file name, 0 to skip it
  */
 
-int news_select (struct direct *name)
+static int news_select(const struct dirent *d)
 {
   char c;
-  char *s = name->d_name;
-  while (c = *s++) if (!isdigit (c)) return NIL;
-  return T;
+  const char *s = d->d_name;
+  while (c = *s++) {
+    if (!isdigit(c)) {
+      return 0;
+    }
+  }
+  return 1;
 }
 
 
@@ -417,10 +431,9 @@ int news_select (struct direct *name)
  * Returns: negative if d1 < d2, 0 if d1 == d2, postive if d1 > d2
  */
 
-int news_numsort (const void *d1,const void *d2)
+static int news_numsort(const struct dirent **d1, const struct dirent **d2)
 {
-  return atoi ((*(struct direct **) d1)->d_name) -
-    atoi ((*(struct direct **) d2)->d_name);
+  return atoi((*d1)->d_name) - atoi((*d2)->d_name);
 }
 
 
@@ -429,7 +442,7 @@ int news_numsort (const void *d1,const void *d2)
  *	    option flags
  */
 
-void news_close (MAILSTREAM *stream,long options)
+void news_close(MAILSTREAM *stream, long options)
 {
   if (LOCAL) {			/* only if a file is open */
     news_check (stream);	/* dump final checkpoint */

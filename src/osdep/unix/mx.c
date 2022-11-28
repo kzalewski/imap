@@ -30,6 +30,7 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <errno.h>
+#include <dirent.h>
 extern int errno;		/* just in case */
 #include "mail.h"
 #include "osdep.h"
@@ -98,8 +99,8 @@ long mx_append (MAILSTREAM *stream,char *mailbox,append_t af,void *data);
 long mx_append_msg (MAILSTREAM *stream,char *flags,MESSAGECACHE *elt,
 		    STRING *st,SEARCHSET *set);
 
-int mx_select (struct direct *name);
-int mx_numsort (const void *d1,const void *d2);
+static int mx_select(const struct dirent *d);
+static int mx_numsort(const struct dirent **d1, const struct dirent **d2);
 char *mx_file (char *dst,char *name);
 long mx_lockindex (MAILSTREAM *stream);
 void mx_unlockindex (MAILSTREAM *stream);
@@ -274,19 +275,22 @@ long mx_scan_contents (char *name,char *contents,unsigned long csiz,
   size_t namelen = strlen (name);
   struct stat sbuf;
   struct direct **names = NIL;
-  if ((nfiles = scandir (name,&names,mx_select,mx_numsort)) > 0)
+  if ((nfiles = scandir(name, &names, mx_select, mx_numsort)) > 0) {
     for (i = 0; i < nfiles; ++i) {
       if (!ret) {
 	sprintf (s = (char *) fs_get (namelen + strlen (names[i]->d_name) + 2),
 		 "%s/%s",name,names[i]->d_name);
-	if (!stat (s,&sbuf) && (csiz <= sbuf.st_size))
-	  ret = dummy_scan_contents (s,contents,csiz,sbuf.st_size);
-	fs_give ((void **) &s);
+	if (!stat (s,&sbuf) && (csiz <= sbuf.st_size)) {
+	  ret = dummy_scan_contents(s, contents, csiz, sbuf.st_size);
+        }
+	fs_give((void **) &s);
       }
-      fs_give ((void **) &names[i]);
+      fs_give((void **) &names[i]);
     }
-				/* free directory list */
-  if (a = (void *) names) fs_give ((void **) &a);
+  }  /* free directory list */
+  if (a = (void *) names) {
+    fs_give((void **) &a);
+  }
   return ret;
 }
 
@@ -391,24 +395,26 @@ long mx_delete (MAILSTREAM *stream,char *mailbox)
     sprintf (tmp,"Can't delete mailbox %.80s index: %s",
 	     mailbox,strerror (errno));
   else {			/* get directory name */
-    *(s = strrchr (tmp,'/')) = '\0';
-    if (dirp = opendir (tmp)) {	/* open directory */
+    *(s = strrchr(tmp,'/')) = '\0';
+    if (dirp = opendir(tmp)) {	/* open directory */
       *s++ = '/';		/* restore delimiter */
 				/* massacre messages */
-      while (d = readdir (dirp)) if (mx_select (d)) {
-	strcpy (s,d->d_name);	/* make path */
-	unlink (tmp);		/* sayonara */
+      while (d = readdir(dirp)) {
+        if (mx_select(d)) {
+          strcpy(s, d->d_name);	/* make path */
+          unlink(tmp);		/* sayonara */
+        }
       }
-      closedir (dirp);		/* flush directory */
-      *(s = strrchr (tmp,'/')) = '\0';
-      if (rmdir (tmp)) {	/* try to remove the directory */
-	sprintf (tmp,"Can't delete name %.80s: %s",mailbox,strerror (errno));
-	MM_LOG (tmp,WARN);
+      closedir(dirp);		/* flush directory */
+      *(s = strrchr(tmp, '/')) = '\0';
+      if (rmdir(tmp)) {         /* try to remove the directory */
+        sprintf(tmp,"Can't delete name %.80s: %s",mailbox,strerror (errno));
+        MM_LOG(tmp, WARN);
       }
     }
     return T;			/* always success */
   }
-  MM_LOG (tmp,ERROR);		/* something failed */
+  MM_LOG(tmp, ERROR);		/* something failed */
   return NIL;
 }
 
@@ -459,10 +465,11 @@ long mx_rename (MAILSTREAM *stream,char *old,char *newname)
       size_t srcl = strlen (tmp);
       size_t dstl = strlen (tmp1);
 				/* rename each mx file to new directory */
-      for (i = lasterror = 0,n = scandir (tmp,&names,mx_select,mx_numsort);
+      for (i = lasterror = 0, n = scandir(tmp, &names, mx_select, mx_numsort);
 	   i < n; ++i) {
-	if (mx_rename_work (tmp,srcl,tmp1,dstl,names[i]->d_name))
+	if (mx_rename_work(tmp, srcl, tmp1, dstl, names[i]->d_name)) {
 	  lasterror = errno;
+        }
 	fs_give ((void **) &names[i]);
       }
 				/* free directory list */
@@ -728,28 +735,32 @@ long mx_ping (MAILSTREAM *stream)
   stream->silent = T;		/* don't pass up exists events yet */
   if (sbuf.st_ctime != LOCAL->scantime) {
     struct direct **names = NIL;
-    long nfiles = scandir (stream->mailbox,&names,mx_select,mx_numsort);
-    if (nfiles < 0) nfiles = 0;	/* in case error */
+    long nfiles = scandir(stream->mailbox, &names, mx_select, mx_numsort);
+    if (nfiles < 0) {
+      nfiles = 0;	/* in case error */
+    }
     old = stream->uid_last;
 				/* note scanned now */
     LOCAL->scantime = sbuf.st_ctime;
 				/* scan directory */
     for (i = 0; i < nfiles; ++i) {
 				/* if newly seen, add to list */
-      if ((j = atoi (names[i]->d_name)) > old) {
+      if ((j = atoi(names[i]->d_name)) > old) {
 				/* swell the cache */
-	mail_exists (stream,++nmsgs);
-	stream->uid_last = (elt = mail_elt (stream,nmsgs))->private.uid = j;
+	mail_exists(stream, ++nmsgs);
+	stream->uid_last = (elt = mail_elt(stream, nmsgs))->private.uid = j;
 	elt->valid = T;		/* note valid flags */
 	if (old) {		/* other than the first pass? */
 	  elt->recent = T;	/* yup, mark as recent */
 	  recent++;		/* bump recent count */
 	}
       }
-      fs_give ((void **) &names[i]);
+      fs_give((void **) &names[i]);
     }
 				/* free directory */
-    if (s = (void *) names) fs_give ((void **) &s);
+    if (s = (void *) names) {
+      fs_give((void **) &s);
+    }
   }
   stream->nmsgs = nmsgs;	/* don't upset mail_uid() */
 
@@ -1110,11 +1121,15 @@ long mx_append_msg (MAILSTREAM *stream,char *flags,MESSAGECACHE *elt,
  * Returns: T to use file name, NIL to skip it
  */
 
-int mx_select (struct direct *name)
+static int mx_select(const struct dirent *d)
 {
   char c;
-  char *s = name->d_name;
-  while (c = *s++) if (!isdigit (c)) return NIL;
+  const char *s = d->d_name;
+  while (c = *s++) {
+    if (!isdigit (c)) {
+      return NIL;
+    }
+  }
   return T;
 }
 
@@ -1125,10 +1140,9 @@ int mx_select (struct direct *name)
  * Returns: negative if d1 < d2, 0 if d1 == d2, postive if d1 > d2
  */
 
-int mx_numsort (const void *d1,const void *d2)
+static int mx_numsort(const struct dirent **d1, const struct dirent **d2)
 {
-  return atoi ((*(struct direct **) d1)->d_name) -
-    atoi ((*(struct direct **) d2)->d_name);
+  return atoi ((*d1)->d_name) - atoi ((*d2)->d_name);
 }
 
 
